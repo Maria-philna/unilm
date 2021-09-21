@@ -1,23 +1,41 @@
-# Lint as: python3
 import json
 import logging
 import os
-
 import datasets
-
-from layoutlmft.data.utils import load_image, merge_bbox, normalize_bbox, simplify_bbox
+from PIL import Image
+import numpy as np
 from transformers import AutoTokenizer
-
-
-_URL = "https://github.com/doc-analysis/XFUND/releases/tag/v1.0/"
-
+def load_image(image_path):
+    image = Image.open(image_path).convert("RGB")
+    w, h = image.size
+    # resize image to 224x224
+    image = image.resize((224, 224))
+    image = np.asarray(image)  
+    image = image[:, :, ::-1] # flip color channels from RGB to BGR
+    image = image.transpose(2, 0, 1) # move channels to first dimension
+    return image, (w, h)
+def normalize_bbox(bbox, size):
+    return [
+        int(1000 * bbox[0] / size[0]),
+        int(1000 * bbox[1] / size[1]),
+        int(1000 * bbox[2] / size[0]),
+        int(1000 * bbox[3] / size[1]),
+    ]
+def simplify_bbox(bbox):
+    return [
+        min(bbox[0::2]),
+        min(bbox[1::2]),
+        max(bbox[2::2]),
+        max(bbox[3::2]),
+    ]
+def merge_bbox(bbox_list):
+    x0, y0, x1, y1 = list(zip(*bbox_list))
+    return [min(x0), min(y0), max(x1), max(y1)]
+_URL = "https://github.com/doc-analysis/XFUN/releases/download/v1.0/"
 _LANG = ["zh", "de", "es", "fr", "en", "it", "ja", "pt"]
 logger = logging.getLogger(__name__)
-
-
 class XFUNConfig(datasets.BuilderConfig):
     """BuilderConfig for XFUN."""
-
     def __init__(self, lang, additional_langs=None, **kwargs):
         """
         Args:
@@ -27,15 +45,10 @@ class XFUNConfig(datasets.BuilderConfig):
         super(XFUNConfig, self).__init__(**kwargs)
         self.lang = lang
         self.additional_langs = additional_langs
-
-
 class XFUN(datasets.GeneratorBasedBuilder):
     """XFUN dataset."""
-
     BUILDER_CONFIGS = [XFUNConfig(name=f"xfun.{lang}", lang=lang) for lang in _LANG]
-
     tokenizer = AutoTokenizer.from_pretrained("xlm-roberta-base")
-
     def _info(self):
         return datasets.DatasetInfo(
             features=datasets.Features(
@@ -68,7 +81,6 @@ class XFUN(datasets.GeneratorBasedBuilder):
             ),
             supervised_keys=None,
         )
-
     def _split_generators(self, dl_manager):
         """Returns SplitGenerators."""
         urls_to_download = {
@@ -88,7 +100,6 @@ class XFUN(datasets.GeneratorBasedBuilder):
                 urls_to_download = {"train": [f"{_URL}{lang}.train.json", f"{_URL}{lang}.train.zip"]}
                 additional_downloaded_files = dl_manager.download_and_extract(urls_to_download)
                 train_files_for_many_langs.append(additional_downloaded_files["train"])
-
         logger.info(f"Training on {self.config.lang} with additional langs({self.config.additional_langs})")
         logger.info(f"Evaluating on {self.config.lang}")
         logger.info(f"Testing on {self.config.lang}")
@@ -99,13 +110,11 @@ class XFUN(datasets.GeneratorBasedBuilder):
             ),
             # datasets.SplitGenerator(name=datasets.Split.TEST, gen_kwargs={"filepaths": test_files_for_many_langs}),
         ]
-
     def _generate_examples(self, filepaths):
         for filepath in filepaths:
             logger.info("Generating examples from = %s", filepath)
             with open(filepath[0], "r") as f:
                 data = json.load(f)
-
             for doc in data["documents"]:
                 doc["img"]["fpath"] = os.path.join(filepath[1], doc["img"]["fname"])
                 image, size = load_image(doc["img"]["fpath"])
@@ -131,7 +140,6 @@ class XFUN(datasets.GeneratorBasedBuilder):
                     text_length = 0
                     ocr_length = 0
                     bbox = []
-                    last_box = None
                     for token_id, offset in zip(tokenized_inputs["input_ids"], tokenized_inputs["offset_mapping"]):
                         if token_id == 6:
                             bbox.append(None)
@@ -147,7 +155,7 @@ class XFUN(datasets.GeneratorBasedBuilder):
                         if len(tmp_box) == 0:
                             tmp_box = last_box
                         bbox.append(normalize_bbox(merge_bbox(tmp_box), size))
-                        last_box = tmp_box
+                        last_box = tmp_box  # noqa
                     bbox = [
                         [bbox[i + 1][0], bbox[i + 1][1], bbox[i + 1][0], bbox[i + 1][1]] if b is None else b
                         for i, b in enumerate(bbox)
@@ -184,14 +192,12 @@ class XFUN(datasets.GeneratorBasedBuilder):
                         )
                     else:
                         continue
-
                 def get_relation_span(rel):
                     bound = []
                     for entity_index in [rel["head"], rel["tail"]]:
                         bound.append(entities[entity_index]["start"])
                         bound.append(entities[entity_index]["end"])
                     return min(bound), max(bound)
-
                 relations = sorted(
                     [
                         {

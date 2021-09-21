@@ -9,7 +9,7 @@ from layoutlmft.data.utils import load_image, merge_bbox, normalize_bbox, simpli
 from transformers import AutoTokenizer
 
 
-_URL = "https://github.com/doc-analysis/XFUN/releases/download/v1.0/"
+_URL = "https://github.com/doc-analysis/XFUND/releases/tag/v1.0"
 
 _LANG = ["zh", "de", "es", "fr", "en", "it", "ja", "pt"]
 logger = logging.getLogger(__name__)

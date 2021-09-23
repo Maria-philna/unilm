@@ -87,7 +87,7 @@ def main():
         keep_in_memory=True,
     )
     if training_args.do_predict:
-        datasets["tests"]=datasets["validation"]
+        datasets["test"]=datasets["validation"]
     if training_args.do_train:
         column_names = datasets["train"].column_names
         features = datasets["train"].features

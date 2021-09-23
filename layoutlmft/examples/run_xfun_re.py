@@ -86,6 +86,8 @@ def main():
         additional_langs=data_args.additional_langs,
         keep_in_memory=True,
     )
+    if training_args.do_predict:
+        datasets["tests"]=datasets["validation"]
     if training_args.do_train:
         column_names = datasets["train"].column_names
         features = datasets["train"].features
